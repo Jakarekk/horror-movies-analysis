@@ -1,6 +1,5 @@
 ---
 title: "What affects the populartiy of horror movies"
-authors: Aleksandra Duda, Karolina Jajko, Yehor Kharchenko, Wiktoria Wachel
 date: "2026-05-01"
 ---
 
