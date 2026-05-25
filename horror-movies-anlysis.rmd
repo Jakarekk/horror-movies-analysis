@@ -47,6 +47,9 @@ In this study, popularity serves as the dependent variable. Analysis aims to det
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+
+library(lubridate)
+library(stringr)
 ```
 
 # The dataset
@@ -236,7 +239,7 @@ df %>%
   count()
 ```
 
-While the original dataset contained over 32.000 records, by filtering for movies with confirmed financial data and at least 50 audience votes, the vast majority has to be removed. Due to that, the analysis will be far more reliable.
+While the original dataset contained over 32.000 records, by filtering for movies with confirmed financial data and at least 20 audience votes, the vast majority has to be removed. Due to that, the analysis will be far more reliable.
 
 # Explanatory Data Analysis
 
@@ -247,8 +250,244 @@ as.data.frame(glimpse(df))
 ### Transform release_date column into year and month columns
 
 ```{r}
-df %>%
+df <- df %>%
   mutate(
-    year_added = year(release_date)
+    year_added = year(release_date),
+    month_added = month(release_date)
   )
 ```
+
+In order to check if in current years the popularity of horror movies was higher then usual and etc with months (for example if halloween affects the popularity)
+
+### Diversion of original languages
+
+```{r}
+df %>%
+  select(original_language) %>%
+  count(original_language, sort = TRUE) 
+  
+  
+```
+
+Diversion 5 the most common appeard countires and rest into others column.
+
+```{r}
+df <- df %>%
+  mutate(
+    en_language = if_else(original_language == "en", 1, 0),
+    ja_language = if_else(original_language == 'ja', 1, 0),
+    es_language = if_else(original_language == 'es', 1, 0),
+    ko_language = if_else(original_language == 'ko', 1, 0),
+    fr_language = if_else(original_language == 'fr', 1, 0),
+    
+    others_language = if_else(!(original_language %in% c('en', 'ja', 'es', 'ko', 'fr')), 1,0)
+    
+         )
+```
+
+### Change collection name to is_in_collection
+
+```{r}
+df <- df %>%
+  mutate(
+    is_in_collection = if_else(!is.na(collection_name), 1,0)
+  )
+```
+
+### Genre of movies into columns
+
+```{r}
+df%>%
+  select(genre_names) %>%
+  distinct() 
+```
+
+A few of the most important genre into columns
+
+```{r}
+df <- df %>%
+  mutate(
+    genre_horror = as.numeric(str_detect(genre_names, "Horror")),
+    genre_thriller = as.numeric(str_detect(genre_names, "Thriller")),
+    genre_fantasy = as.numeric(str_detect(genre_names, "Fantasy")),
+    genre_sc = as.numeric(str_detect(genre_names, "Science Fiction")),
+    genre_crime = as.numeric(str_detect(genre_names, "Crime")),
+    genre_action = as.numeric(str_detect(genre_names, "Action")),
+    genre_comedy = as.numeric(str_detect(genre_names, "Comedy")),
+    genre_drama = as.numeric(str_detect(genre_names, "Drama"))
+  ) 
+```
+
+### Profit column
+
+Revenue - budget - did the film earn or lost money
+
+```{r}
+df <- df %>%
+  mutate(
+    profit = revenue - budget
+  )
+```
+
+### New schema of columns
+
+```{r}
+colnames(df)
+```
+
+### Do years or months impact the popularity of horror movies?
+
+```{r}
+df %>%
+  ggplot(aes(x = year_added, y = popularity)) +
+  geom_point() +
+  scale_y_log10() +
+  labs(title = "Horror Movie Popularity Over the Years",
+       x = "Year of Release",
+       y = "Popularity ")
+    
+
+```
+
+To investigate if there is a long-term trend in the popularity of horror movies.
+
+A scatter plot shows a significant rise of popularity in recent years.
+
+A crucial bias is the fact that popularity metric is dynamic and is favouring recent releases.
+
+```{r}
+df %>%
+  ggplot(aes(x = month_added, y = popularity)) +
+  geom_point() +
+  scale_y_log10() +
+  labs(title = "Monthly Trends in Horror Movie Popularity",
+       x = "Month ",
+       y = "Popularity")
+```
+
+To see if the timing of a movie's release (e.g., around Halloween) impacts its overall popularity score.
+
+The scores are relatively spread, but with slight dips at the very beginning and end of the year.
+
+### Does the language of the movie affects its success?
+
+```{r}
+df %>%
+  filter(original_language %in% c("en", "ja", "es", "ko", "fr")) %>%
+  ggplot(aes(x = original_language, y = popularity, fill = original_language)) +
+  geom_boxplot() +
+  scale_y_log10()  +
+  labs(title = "Popularity Distribution by Movie Language",
+       x = "Original Language",
+       y = "Popularity")
+
+```
+
+To compare the market reach of English-language horror movies against major international competitors like Japanese or Korean horror.
+
+While English has the most data points, Korean (ko) and Japanese (ja) horror films show very high median popularity levels.
+
+### Amount of specific genres
+
+```{r}
+
+genre_sums <- data.frame(
+  Genre = c("Horror", "Action", "Thriller", "Fantasy", "Comedy", "Science Fiction", "Crime", "Drama"),
+  Amount = c(sum(df$genre_horror), sum(df$genre_action), sum(df$genre_thriller), 
+             sum(df$genre_fantasy), sum(df$genre_comedy), sum(df$genre_sc), sum(df$genre_crime), sum(df$genre_drama))
+)
+
+ggplot(genre_sums, aes(x = Genre, y = Amount, fill = Genre)) +
+  geom_col() +
+  labs(title = "The amount of movies in genres",
+       x = "Genre",
+       y = "Number of Movies")
+```
+
+To identify which genres are most commonly paired with horror in the industry.
+
+### The aspect of money in popularity
+
+```{r}
+df %>%
+  pivot_longer(
+    cols = c(profit, revenue, budget), 
+    names_to = "money_type", 
+    values_to = "amount") %>%
+  ggplot(aes(x = amount, y = popularity, color = money_type)) +
+  geom_point() +
+  facet_wrap(~money_type) +
+  scale_y_log10()  +
+  labs(title = "Impact of Financial Metrics on Popularity",
+       x = "Amount",
+       y = "Popularity")
+```
+
+To see if spending more money (Budget) or earning more (Revenue/Profit) directly correlates with higher popularity.
+
+Revenue and Profit show a clearer positive correlation with popularity than the initial Budget does.
+
+### Impact of being part of a collection
+
+```{r}
+df %>%
+  mutate(is_in_collection = if_else(is_in_collection == 1, "Franchise", "Standalone")) %>%
+  ggplot(aes(x = is_in_collection, y = popularity, fill = is_in_collection)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title = "Franchise vs. Standalone Horror Movies",
+       x = "Movie Category",
+       y = "Popularity ")
+```
+
+To test if movies that are part of a collections have an advantage in popularity over one-off films.
+
+The "Franchise" group has a noticeably higher median popularity score.
+
+### Audience engagement
+
+```{r}
+df %>%
+ggplot( aes(x = vote_count, y = popularity)) +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(title = "Audience Engagement: Vote Count vs. Popularity",
+       x = "Number of Votes ",
+       y = "Popularity")
+```
+
+To verify if the popularity score is a reflection of total audience interaction.
+
+The plot reveals a strong positive correlation between the number of votes and popularity. There are also undefined.
+
+### Distribution of movie lengths
+
+```{r}
+df %>%
+  ggplot( aes(x = runtime)) +
+  geom_histogram() +
+  labs(title = "Distribution of Horror Movie Runtimes",
+       x = "Runtime (minutes)",
+       y = "Frequency")
+```
+
+To identify the "industry standard" for horror movie durations and to spot any unusual outliers (extremely short or long films).
+
+A histogram showing a strong peak between 80 and 100 minutes.
+
+### Are the highest ranked the most popular?
+
+```{r}
+df %>%
+  ggplot( aes(x = vote_average, y = popularity)) +
+  geom_point() +
+  scale_y_log10() +
+  labs(title = "Quality vs. Fame: Rating vs. Popularity",
+       x = "Average Vote",
+       y = "Popularity")
+```
+
+To see if higher rated movies lead to higher popularity.
+
+There is a slight upward trend.
